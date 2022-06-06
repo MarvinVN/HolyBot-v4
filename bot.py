@@ -3,7 +3,13 @@ from discord.ext import commands
 import json
 import os
 
+def read_token():
+    with open('token.txt', 'r') as f:
+        lines = f.readlines()
+        return lines[0].strip()
+
 intents = discord.Intents().all()
+token = read_token()
 client = commands.Bot(command_prefix='$', intents=intents)
 
 @client.event
@@ -106,5 +112,5 @@ async def purge(ctx, amount=2):
     else:
         await ctx.channel.purge(limit=amount+1)
 
-client.run(os.getenv('SECRET'))
+client.run(token)
 
