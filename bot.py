@@ -1,116 +1,111 @@
-import discord
-from discord.ext import commands
+from nextcord import Interaction, SlashOption, ChannelType
+from nextcord.abc import GuildChannel
+from nextcord.ext import commands, tasks
+import nextcord
 import json
-import os
+from itertools import cycle
+import aiosqlite
 
 def read_token():
     with open('./token.txt', 'r') as f:
         lines = f.readlines()
         return lines[0].strip()
 
-intents = discord.Intents().all()
+testingServerID = 216653732526424065 #only used for production, take out of slash command arguments once fully implemented
+
+intents = nextcord.Intents().all()
 token = read_token()
 client = commands.Bot(command_prefix='$', intents=intents)
+
+status = cycle([
+    'you 👀',
+    'the Minecraft movie',
+    'BBC'
+])
 
 @client.event
 async def on_ready():
     print('HolyBot v4 ready')
+    async with aiosqlite.connect('main.db') as db:
+        async with db.cursor() as cursor:
+            await cursor.execute('CREATE TABLE IF NOT EXISTS servers (guildID INTEGER, autorole INTEGER)')
+        await db.commit()
+    status_swap.start()
+
+@tasks.loop(seconds=1800)
+async def status_swap():
+    await client.change_presence(activity=nextcord.Activity(type=nextcord.ActivityType.watching, name=next(status)))
 
 @client.event
 async def on_guild_join(guild):
-    with open('servers.json', 'r') as f:
-        servers = json.load(f)
-
-    servers[str(guild.id)] = {}
-
-    servers[str(guild.id)]['prefix'] = '$'
-    servers[str(guild.id)]['autorole'] = 0
-
-    with open('servers.json', 'w') as f:
-        json.dump(servers, f, indent=4)
+    async with aiosqlite.connect('main.db') as db:
+        async with db.cursor() as cursor:
+            await cursor.execute('INSERT INTO servers (guildID, autorole) VALUES (?, ?)', (guild.id, 0,))
+        await db.commit()
 
 @client.event
 async def on_guild_remove(guild):
-    with open('servers.json', 'r') as f:
-        servers = json.load(f)
+    async with aiosqlite.connect('main.db') as db:
+        async with db.cursor() as cursor:
+            await cursor.execute('DELETE FROM servers WHERE guildID = ?', (guild.id,))
+        await db.commit()
 
-    servers.pop(str(guild.id))
+async def get_autorole(guild):
+    async with aiosqlite.connect("main.db") as db:
+        async with db.cursor() as cursor:
+            await cursor.execute('SELECT autorole FROM servers WHERE guildID = ?', (guild.id,))
+            data = await cursor.fetchone()
+            data = data[0]
 
-    with open('servers.json', 'w') as f:
-        json.dump(servers, f, indent=4)
-
-def get_autorole(guild):
-    with open('servers.json', 'r') as f:
-        servers = json.load(f)
-
-    return servers[str(guild.id)]['autorole']
+    return data
 
 @client.event
 async def on_member_join(member):
     await member.guild.text_channels[0].send(f'{member.name} has joined!')
     await member.add_roles(member.guild.get_role(get_autorole(member.guild)))
 
-@client.command()
-async def ping(ctx):
-    await ctx.send('pong')
+@client.slash_command(guild_ids=[testingServerID])
+async def ping(interaction:Interaction):
+    await interaction.response.send_message("Pong!")
 
-@client.command(aliases=['autorole'])
-async def set_autorole(ctx, role:discord.Role):
-    with open('servers.json', 'r') as f:
-        servers = json.load(f)
+@client.slash_command(guild_ids=[testingServerID])
+async def autorole(interaction:Interaction, role:nextcord.Role):
 
-    servers[str(ctx.guild.id)]['autorole'] = role.id
-
-    with open('servers.json', 'w') as f:
-        json.dump(servers, f, indent=4)
-
-    await ctx.send(f'Autorole changed to *{ctx.guild.get_role(role.id)}*')
-
-@set_autorole.error
-async def autorole_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("Please include a role")
-    elif isinstance(error, commands.RoleNotFound):
-        await ctx.send("Role not found")
-
-@client.command(aliases=['prefix'])
-async def setprefix(ctx, prefixset='$'):
-    if (not ctx.author.guild_permissions.manage_guild):
-        await ctx.send("You do not have the required permissions")
+    if (not interaction.user.guild_permissions.manage_guild):
+        await interaction.response.send_message("You do not have the required permissions")
         return
 
-    with open('servers.json', 'r') as f:
-        servers = json.load(f)
+    async with aiosqlite.connect("main.db") as db:
+        async with db.cursor() as cursor:
+            await cursor.execute('SELECT autorole FROM servers WHERE guildID = ?', (interaction.guild_id,))
+            data = await cursor.fetchone()
+            data = data[0]
+            if data:
+                await cursor.execute('UPDATE servers SET autorole = ? WHERE guildID = ?', (role.id, interaction.guild_id,))
+            else:
+                await cursor.execute('INSERT INTO servers (guildID, autorole) VALUES (?, ?)', (interaction.guild_id, role.id,))
+        await db.commit()
+    await interaction.response.send_message(f'Autorole changed to *{interaction.guild.get_role(role.id)}*')
 
-    servers[str(ctx.guild.id)]['prefix'] = prefixset
+@client.slash_command(guild_ids=[testingServerID])
+async def kick(interaction:Interaction, member:nextcord.Member, *, reason=None):
 
-    with open('servers.json', 'w') as f:
-        json.dump(servers, f, indent=4)
-
-    client.command_prefix = prefixset
-    await ctx.send(f"Prefix has been changed to *{prefixset}*")
-
-@client.command()
-async def kick(ctx, member:discord.Member, *, reason=None):
+    if (not interaction.user.guild_permissions.kick_members):
+        await interaction.response.send_message("You do not have the required permissions")
+        return
+    
     await member.kick(reason=reason)
-    await ctx.send(f'{member.mention} has been kicked')
+    await interaction.response.send_message(f'{member.mention} has been kicked')
 
-@kick.error
-async def kick_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("Please include a member")
-    elif isinstance(error, commands.MemberNotFound):
-        await ctx.send("Member not found")
-
-@client.command(aliases=['clear'])
-async def purge(ctx, amount=2):
-    if (not ctx.author.guild_permissions.manage_messages):
-        await ctx.send("You do not have the required permissions")
+@client.slash_command(guild_ids=[testingServerID])
+async def purge(interaction:Interaction, amount:int):
+    if (not interaction.user.guild_permissions.manage_messages):
+        await interaction.response.send_message("You do not have the required permissions")
         return
     if amount > 101:
-        await ctx.send("Cannot delete more than 100 messages")
+        await interaction.response.send_message("Cannot delete more than 100 messages")
     else:
-        await ctx.channel.purge(limit=amount+1)
+        await interaction.channel.purge(limit=amount+1)
+        await interaction.response.send_message(f"**{amount}** messages purged.")
 
 client.run(token)
-
