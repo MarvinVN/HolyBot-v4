@@ -5,16 +5,14 @@ import nextcord
 import json
 from itertools import cycle
 import aiosqlite
-
-def read_token():
-    with open('./token.txt', 'r') as f:
-        lines = f.readlines()
-        return lines[0].strip()
+import os
+from dotenv import load_dotenv
 
 testingServerID = 216653732526424065 #only used for production, take out of slash command arguments once fully implemented
 
 intents = nextcord.Intents().all()
-token = read_token()
+load_dotenv()
+token = os.getenv("SECRET")
 client = commands.Bot(command_prefix='$', intents=intents)
 
 status = cycle([
