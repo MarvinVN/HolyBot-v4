@@ -2,3 +2,4 @@ nextcord
 pysqlite3
 aiosqlite
 python-dotenv
+cassiopeia

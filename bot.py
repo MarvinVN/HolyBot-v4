@@ -3,10 +3,10 @@ from nextcord.abc import GuildChannel
 from nextcord.ext import commands, tasks
 import nextcord
 import json
-from itertools import cycle
 import aiosqlite
 import os
 from dotenv import load_dotenv
+#from .cogs.admin import status_swap
 
 testingServerID = 216653732526424065 #only used for production, take out of slash command arguments once fully implemented
 
@@ -15,41 +15,51 @@ load_dotenv()
 token = os.getenv("SECRET")
 client = commands.Bot(command_prefix='$', intents=intents)
 
-status = cycle([
-    'you 👀',
-    'the Minecraft movie',
-    'BBC'
-])
+for file in os.listdir("./cogs"):
+    if file.endswith(".py"):
+        client.load_extension(f"cogs.{file[:-3]}")
+
+@client.command()
+async def load(ctx, extension):
+    client.load_extension(f"cogs.{extension}")
+    await ctx.send("Loaded cog!")
+
+@client.command()
+async def unload(ctx, extension):
+    client.unload_extension(f"cogs.{extension}")
+    await ctx.send("Unloaded cog!")
+
+@client.command()
+async def reload(ctx, extension):
+    client.reload_extension(f"cogs.{extension}")
+    await ctx.send("Reloaded cog!")
+    
 
 @client.event
 async def on_ready():
     print('HolyBot v4 ready')
-    async with aiosqlite.connect('main.db') as db:
+    async with aiosqlite.connect('./database/main.db') as db:
         async with db.cursor() as cursor:
             await cursor.execute('CREATE TABLE IF NOT EXISTS servers (guildID INTEGER, autorole INTEGER)')
+            await cursor.execute('CREATE TABLE IF NOT EXISTS rankedwatch (id INTEGER, guildID INTEGER, summonerName VARCHAR(16))')
         await db.commit()
-    status_swap.start()
-
-@tasks.loop(seconds=1800)
-async def status_swap():
-    await client.change_presence(activity=nextcord.Activity(type=nextcord.ActivityType.watching, name=next(status)))
 
 @client.event
 async def on_guild_join(guild):
-    async with aiosqlite.connect('main.db') as db:
+    async with aiosqlite.connect('./database/main.db') as db:
         async with db.cursor() as cursor:
             await cursor.execute('INSERT INTO servers (guildID, autorole) VALUES (?, ?)', (guild.id, 0,))
         await db.commit()
 
 @client.event
 async def on_guild_remove(guild):
-    async with aiosqlite.connect('main.db') as db:
+    async with aiosqlite.connect('./database/main.db') as db:
         async with db.cursor() as cursor:
             await cursor.execute('DELETE FROM servers WHERE guildID = ?', (guild.id,))
         await db.commit()
 
 async def get_autorole(guild):
-    async with aiosqlite.connect("main.db") as db:
+    async with aiosqlite.connect("./databse/main.db") as db:
         async with db.cursor() as cursor:
             await cursor.execute('SELECT autorole FROM servers WHERE guildID = ?', (guild.id,))
             data = await cursor.fetchone()
@@ -64,46 +74,7 @@ async def on_member_join(member):
 
 @client.slash_command(guild_ids=[testingServerID])
 async def ping(interaction:Interaction):
+    '''Pings the bot'''
     await interaction.response.send_message("Pong!")
-
-@client.slash_command(guild_ids=[testingServerID])
-async def autorole(interaction:Interaction, role:nextcord.Role):
-
-    if (not interaction.user.guild_permissions.manage_guild):
-        await interaction.response.send_message("You do not have the required permissions")
-        return
-
-    async with aiosqlite.connect("main.db") as db:
-        async with db.cursor() as cursor:
-            await cursor.execute('SELECT autorole FROM servers WHERE guildID = ?', (interaction.guild_id,))
-            data = await cursor.fetchone()
-            data = data[0]
-            if data:
-                await cursor.execute('UPDATE servers SET autorole = ? WHERE guildID = ?', (role.id, interaction.guild_id,))
-            else:
-                await cursor.execute('INSERT INTO servers (guildID, autorole) VALUES (?, ?)', (interaction.guild_id, role.id,))
-        await db.commit()
-    await interaction.response.send_message(f'Autorole changed to *{interaction.guild.get_role(role.id)}*')
-
-@client.slash_command(guild_ids=[testingServerID])
-async def kick(interaction:Interaction, member:nextcord.Member, *, reason=None):
-
-    if (not interaction.user.guild_permissions.kick_members):
-        await interaction.response.send_message("You do not have the required permissions")
-        return
-    
-    await member.kick(reason=reason)
-    await interaction.response.send_message(f'{member.mention} has been kicked')
-
-@client.slash_command(guild_ids=[testingServerID])
-async def purge(interaction:Interaction, amount:int):
-    if (not interaction.user.guild_permissions.manage_messages):
-        await interaction.response.send_message("You do not have the required permissions")
-        return
-    if amount > 101:
-        await interaction.response.send_message("Cannot delete more than 100 messages")
-    else:
-        await interaction.channel.purge(limit=amount+1)
-        await interaction.response.send_message(f"**{amount}** messages purged.")
 
 client.run(token)
