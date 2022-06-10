@@ -6,7 +6,6 @@ import json
 import aiosqlite
 import os
 from dotenv import load_dotenv
-#from .cogs.admin import status_swap
 
 testingServerID = 216653732526424065 #only used for production, take out of slash command arguments once fully implemented
 
@@ -59,7 +58,7 @@ async def on_guild_remove(guild):
         await db.commit()
 
 async def get_autorole(guild):
-    async with aiosqlite.connect("./databse/main.db") as db:
+    async with aiosqlite.connect("./database/main.db") as db:
         async with db.cursor() as cursor:
             await cursor.execute('SELECT autorole FROM servers WHERE guildID = ?', (guild.id,))
             data = await cursor.fetchone()
@@ -69,8 +68,8 @@ async def get_autorole(guild):
 
 @client.event
 async def on_member_join(member):
-    await member.guild.text_channels[0].send(f'{member.name} has joined!')
-    await member.add_roles(member.guild.get_role(get_autorole(member.guild)))
+    await member.guild.text_channels[0].send(f'{member.mention} has joined!')
+    await member.add_roles(member.guild.get_role(await get_autorole(member.guild)))
 
 @client.slash_command(guild_ids=[testingServerID])
 async def ping(interaction:Interaction):
