@@ -26,9 +26,6 @@ class RankedWatch(commands.Cog):
                 await cursor.execute('CREATE TABLE IF NOT EXISTS updated (summonerName VARCHAR(16), tier VARCHAR(12), division VARCHAR(3), LP INTEGER, lastmatch VARCHAR(255), win BOOL)')
             await db.commit()
         self.rankedwatch.start()
-
-    #@commands.Cog.listener()
-    #async def rankedwatch(self):
     
     def get_last_match(self, summoner:cass.Summoner)->cass.Match:
         match_history = cass.get_match_history(
@@ -41,6 +38,7 @@ class RankedWatch(commands.Cog):
     def get_ranked_data(self, summoner:cass.Summoner):
         target = [entry for entry in summoner.league_entries.fives.league.entries if entry.summoner.name == summoner.name][0]
         res = {
+            'name': target.summoner.name,
             'tier': str(target.tier),
             'division': str(target.division),
             'lp': target.league_points
@@ -86,9 +84,11 @@ class RankedWatch(commands.Cog):
                         embed_name = embed_value = ''
                         summoner = cass.get_summoner(name=name, region="NA")
 
+                        # perhaps change ranked_data and last_match to recieve summoner name instead
+                        # might fix updating issue.
+
                         await cursor.execute('SELECT * FROM updated WHERE summonerName = ?', (name,))
                         data = await cursor.fetchone()
-
                         if data:
                             newmatch_id = data[4]
                             if newmatch_id == lastmatch_id:
@@ -96,12 +96,14 @@ class RankedWatch(commands.Cog):
                             new_data = {
                                 'tier': data[1],
                                 'division': data[2],
-                                'lp': data[3],
+                                'lp': int(data[3]),
                                 'win': True if data[5] else False
                             }
                         else:
                             newmatch = self.get_last_match(summoner)
-                            newmatch_id = newmatch.id
+                            newmatch_id = str(newmatch.id)
+                            if newmatch_id[:4] != "NA1_":
+                                newmatch_id = "NA1_" + newmatch_id
                             if newmatch_id == lastmatch_id:
                                 continue
                             new_data = self.get_ranked_data(summoner)
@@ -113,14 +115,16 @@ class RankedWatch(commands.Cog):
 
                         if new_data['win']:
                             result, change = 'WON', 'PROMOTED'
+                            lp_gain = f'+{lp_gain}'
                         else:
                             result, change = 'LOST', 'DEMOTED'
 
                         embed_name = f'{name} JUST {result} A RANKED GAME'
-                        embed_value = f'{lp_gain} IN {tier.upper()} {division}'
 
                         if tier != new_data['tier'] or division != new_data['division']:
-                            embed_value += f' --> {change} : {new_data["tier"]} {new_data["division"]}'
+                            embed_value = f'{change} : {name} is now {new_data["tier"]} {new_data["division"]}'
+                        else:
+                            embed_value = f'{lp_gain} IN {tier.upper()} {division}'
 
                         embedVar.add_field(name=embed_name, value=embed_value, inline=False)
 
@@ -129,7 +133,7 @@ class RankedWatch(commands.Cog):
                                                 (name, new_data['tier'], new_data['division'], new_data['lp'], newmatch_id, new_data['win'],))
                     
                     if new_games:
-                        embedVar.set_footer(text="Ranked Watch updates every 15 minutes")
+                        embedVar.set_footer(text="Ranked Watch updates every 15 minutes | LP change might not always be accurate")
                         await guild.text_channels[0].send(embed=embedVar)
 
                 await cursor.execute('UPDATE players SET (tier, division, LP, lastmatch) = (updated.tier, updated.division, updated.LP, updated.lastmatch) \
@@ -145,22 +149,29 @@ class RankedWatch(commands.Cog):
             async with db.cursor() as cursor:
                 await cursor.execute('SELECT * FROM rankedwatch WHERE id = ? AND guildID = ?', (member.id, interaction.guild_id,))
                 data = await cursor.fetchone()
+
                 if data:
                     await cursor.execute('UPDATE rankedwatch SET summonerName = ? WHERE id = ? AND guildID = ?', (summonername, member.id, interaction.guild_id,))
                     await interaction.response.send_message(f"{member} successfully updated as {summonername}")
-                else:
-                    await cursor.execute('INSERT INTO rankedwatch (id, guildID, summonerName) VALUES (?, ?, ?)', (member.id, interaction.guild_id, summonername,))
-
-                    await cursor.execute('SELECT * from players WHERE summonerName = ?', (summonername,))
-                    ranked_data = await cursor.fetchone()
-                    if not ranked_data:
-
+                    await cursor.execute('SELECT summonerName FROM players WHERE summonerName = ?', (summonername,))
+                    data = await cursor.fetchone()
+                    if not data:
                         summoner = cass.get_summoner(name=summonername, region="NA")
                         match_id = self.get_last_match(summoner).id
                         ranked_data = self.get_ranked_data(summoner)
-
                         await cursor.execute('INSERT INTO players (summonerName, tier , division , LP, lastmatch) VALUES (?, ?, ?, ?, ?)',
-                        (ranked_data['name'], ranked_data['tier'], ranked_data['div'], ranked_data['lp'], match_id,))
+                        (ranked_data['name'], ranked_data['tier'], ranked_data['division'], ranked_data['lp'], match_id,))
+                else:
+                    await cursor.execute('INSERT INTO rankedwatch (id, guildID, summonerName) VALUES (?, ?, ?)', (member.id, interaction.guild_id, summonername,))
+                    await cursor.execute('SELECT * from players WHERE summonerName = ?', (summonername,))
+                    ranked_data = await cursor.fetchone()
+
+                    if not ranked_data:
+                        summoner = cass.get_summoner(name=summonername, region="NA")
+                        match_id = self.get_last_match(summoner).id
+                        ranked_data = self.get_ranked_data(summoner)
+                        await cursor.execute('INSERT INTO players (summonerName, tier , division , LP, lastmatch) VALUES (?, ?, ?, ?, ?)',
+                        (ranked_data['name'], ranked_data['tier'], ranked_data['division'], ranked_data['lp'], match_id,))
 
                     await interaction.response.send_message(f"{member.mention} successfully added to Ranked Watch list as **{summonername}**")
             await db.commit()
@@ -172,11 +183,13 @@ class RankedWatch(commands.Cog):
             async with db.cursor() as cursor:
                 await cursor.execute('SELECT * FROM rankedwatch WHERE id = ? AND guildID = ?', (member.id, interaction.guild_id,))
                 data = await cursor.fetchone()
+                
                 if data:
                     await cursor.execute('DELETE FROM rankedwatch WHERE id = ? AND guildID = ?', (member.id, interaction.guild_id,))
                     await interaction.response.send_message(f"{member.mention} successfully removed from Ranked Watch")
                 else:
                     await interaction.response.send_message(f"{member.mention} not found in Ranked Watch list")
+                    
             await db.commit()
 
     @client.slash_command(guild_ids=[testingServerID])
@@ -198,5 +211,39 @@ class RankedWatch(commands.Cog):
                     else:
                         await interaction.response.send_message(f'Player **{summonername}** not found in database')
 
+    @client.slash_command(guild_ids=[testingServerID])
+    async def print_ranked_list(self, interaction:Interaction):
+        '''Returns list of players in the ranked watch list'''
+        async with aiosqlite.connect("./database/main.db") as db:
+            async with db.cursor() as cursor:
+                await cursor.execute('SELECT ID, summonerName FROM rankedwatch WHERE guildID = ?', (interaction.guild_id,))
+                data = await cursor.fetchall()
+                if data:
+                    ranked_list = ''
+                    for entry in data:
+                        summonername = entry[1]
+                        await cursor.execute('SELECT tier, division FROM players WHERE summonerName = ?', (summonername,))
+                        rank = await cursor.fetchone()
+                        member = interaction.guild.get_member(entry[0])
+                        ranked_list += f'{member.mention}: {summonername}, {rank[0]} {rank[1]}\n'
+                    await interaction.response.send_message(ranked_list)
+                else:
+                    await interaction.response.send_message('Ranked Watch list currently empty')
+
+    @client.slash_command(guild_ids=[testingServerID])
+    async def print_player_list(self, interaction:Interaction):
+        '''Returns list of players in player database'''
+        async with aiosqlite.connect('./database/main.db') as db:
+            async with db.cursor() as cursor:
+                await cursor.execute('SELECT summonerName, tier, division, LP FROM players')
+                data = await cursor.fetchall()
+                if data:
+                    player_list = ''
+                    for entry in data:
+                        player_list += f'{entry[0]}: {entry[1]} {entry[2]} with {entry[3]} LP\n'
+                    await interaction.response.send_message(player_list)
+                else:
+                    await interaction.response.send_message('Player database currently empty')
+        
 def setup(bot):
     bot.add_cog(RankedWatch(bot))
