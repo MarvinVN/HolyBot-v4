@@ -39,7 +39,7 @@ async def on_ready():
     print('HolyBot v4 ready')
     async with aiosqlite.connect('./database/main.db') as db:
         async with db.cursor() as cursor:
-            await cursor.execute('CREATE TABLE IF NOT EXISTS servers (guildID INTEGER, autorole INTEGER)')
+            await cursor.execute('CREATE TABLE IF NOT EXISTS servers (guildID INTEGER, autorole INTEGER, rankedwatch_channel)')
             await cursor.execute('CREATE TABLE IF NOT EXISTS rankedwatch (id INTEGER, guildID INTEGER, summonerName VARCHAR(16))')
         await db.commit()
 
@@ -47,7 +47,7 @@ async def on_ready():
 async def on_guild_join(guild):
     async with aiosqlite.connect('./database/main.db') as db:
         async with db.cursor() as cursor:
-            await cursor.execute('INSERT INTO servers (guildID, autorole) VALUES (?, ?)', (guild.id, 0,))
+            await cursor.execute('INSERT INTO servers (guildID, autorole, rankedwatch_channel) VALUES (?, ?)', (guild.id, 0, 0,))
         await db.commit()
 
 @client.event
@@ -55,6 +55,7 @@ async def on_guild_remove(guild):
     async with aiosqlite.connect('./database/main.db') as db:
         async with db.cursor() as cursor:
             await cursor.execute('DELETE FROM servers WHERE guildID = ?', (guild.id,))
+            await cursor.execute('DELETE FROM rankedwatch WHERE guildID = ?', (guild.id,))
         await db.commit()
 
 async def get_autorole(guild):

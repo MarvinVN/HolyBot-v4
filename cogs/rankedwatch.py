@@ -1,5 +1,4 @@
-from hashlib import new
-from nextcord import Interaction
+from nextcord import Interaction, Permissions, TextChannel
 from nextcord.ext import commands, tasks
 import nextcord
 import aiosqlite
@@ -35,6 +34,10 @@ class RankedWatch(commands.Cog):
         )
         return match_history[0]
 
+    '''
+    get_ranked_data() sometimes doesn't give the updated data. Probably to do with how the data pipeline works with cassiopeia/Riot API
+    Ongoing issue, will find solution later
+    '''
     def get_ranked_data(self, summoner:cass.Summoner):
         target = [entry for entry in summoner.league_entries.fives.league.entries if entry.summoner.name == summoner.name][0]
         res = {
@@ -60,14 +63,23 @@ class RankedWatch(commands.Cog):
         async with aiosqlite.connect("./database/main.db") as db:
             async with db.cursor() as cursor:
 
-                await cursor.execute('SELECT guildID FROM servers')
+                await cursor.execute('SELECT guildID, rankedwatch_channel FROM servers')
                 guilds = await cursor.fetchall()
 
                 for guild_entry in guilds:
                     guild_id = guild_entry[0]
+                    text_channel = guild_entry[1]
+
                     guild = self.bot.get_guild(guild_id)
 
+                    if text_channel == 0:
+                        for channel in guild.text_channels:
+                            if channel.permissions_for(guild.me).send_messages:
+                                text_channel = channel.id
+                                break
+
                     embedVar = nextcord.Embed(title="Ranked Watch Results", color=0x4eceef)
+                    embedVar.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/LoL_icon.svg/256px-LoL_icon.svg.png?20201029024159")
                     new_games = False
 
                     await cursor.execute('SELECT players.*, rankedwatch.id FROM players INNER JOIN rankedwatch ON rankedwatch.summonerName=players.summonerName')
@@ -79,13 +91,10 @@ class RankedWatch(commands.Cog):
                         division = player[2]
                         lp = player[3]
                         lastmatch_id = player[4]
-                        #member = guild.get_member(player[5])
+                        member = guild.get_member(player[5])
 
                         embed_name = embed_value = ''
                         summoner = cass.get_summoner(name=name, region="NA")
-
-                        # perhaps change ranked_data and last_match to recieve summoner name instead
-                        # might fix updating issue.
 
                         await cursor.execute('SELECT * FROM updated WHERE summonerName = ?', (name,))
                         data = await cursor.fetchone()
@@ -122,9 +131,9 @@ class RankedWatch(commands.Cog):
                         embed_name = f'{name} JUST {result} A RANKED GAME'
 
                         if tier != new_data['tier'] or division != new_data['division']:
-                            embed_value = f'{change} : {name} is now {new_data["tier"]} {new_data["division"]}'
+                            embed_value = f'{change} : {member.mention} is now {new_data["tier"]} {new_data["division"]}'
                         else:
-                            embed_value = f'{lp_gain} IN {tier.upper()} {division}'
+                            embed_value = f'{lp_gain} IN {tier.upper()} {division} | {member.mention}'
 
                         embedVar.add_field(name=embed_name, value=embed_value, inline=False)
 
@@ -134,13 +143,14 @@ class RankedWatch(commands.Cog):
                     
                     if new_games:
                         embedVar.set_footer(text="Ranked Watch updates every 15 minutes | LP change might not always be accurate")
-                        await guild.text_channels[0].send(embed=embedVar)
+                        await guild.get_channel(text_channel).send(embed=embedVar)
 
                 await cursor.execute('UPDATE players SET (tier, division, LP, lastmatch) = (updated.tier, updated.division, updated.LP, updated.lastmatch) \
                                     FROM updated WHERE updated.summonerName = players.summonerName')
                 await db.commit()
                 await cursor.execute('DELETE FROM updated')   
-            await db.commit()  
+            await db.commit()
+        print("Ranked Watch cycle done")  
 
     @client.slash_command(guild_ids=[testingServerID])
     async def addtowatch(self, interaction:Interaction, member:nextcord.Member, summonername:str):
@@ -176,7 +186,7 @@ class RankedWatch(commands.Cog):
                     await interaction.response.send_message(f"{member.mention} successfully added to Ranked Watch list as **{summonername}**")
             await db.commit()
 
-    @client.slash_command(guild_ids=[testingServerID])
+    @client.slash_command(default_member_permissions=Permissions(move_members=True), guild_ids=[testingServerID])
     async def removefromwatch(self, interaction:Interaction, member:nextcord.Member):
         '''Stops updates for and removes member from Ranked Watch list'''
         async with aiosqlite.connect("./database/main.db") as db:
@@ -192,15 +202,15 @@ class RankedWatch(commands.Cog):
                     
             await db.commit()
 
-    @client.slash_command(guild_ids=[testingServerID])
+    @client.slash_command(default_member_permissions=Permissions(administrator=True), guild_ids=[testingServerID])
     async def removefromranked(self, interaction:Interaction, summonername:str):
         '''Removes a player from the Ranked Watch database. Cannot be done if player is still on the Ranked Watch list'''
         async with aiosqlite.connect("./database/main.db") as db:
             async with db.cursor() as cursor:
-                await cursor.execute('SELECT * FROM rankedwatch WHERE guildID = ? AND summonerName = ?', (interaction.guild_id, summonername,))
+                await cursor.execute('SELECT * FROM rankedwatch WHERE summonerName = ?', (summonername,))
                 data = await cursor.fetchone()
                 if data:
-                    await interaction.response.send_message(f'Removal failed. Player **{summonername}** is still on the Ranked Watch list!')
+                    await interaction.response.send_message(f"Removal failed. Player **{summonername}** is still on a server's Ranked Watch list!")
                 else:
                     await cursor.execute('SELECT * FROM players WHERE summonerName = ?', (summonername,))
                     ranked_data = await cursor.fetchone()
@@ -212,7 +222,7 @@ class RankedWatch(commands.Cog):
                         await interaction.response.send_message(f'Player **{summonername}** not found in database')
 
     @client.slash_command(guild_ids=[testingServerID])
-    async def print_ranked_list(self, interaction:Interaction):
+    async def print_ranked_watch(self, interaction:Interaction):
         '''Returns list of players in the ranked watch list'''
         async with aiosqlite.connect("./database/main.db") as db:
             async with db.cursor() as cursor:
@@ -231,7 +241,7 @@ class RankedWatch(commands.Cog):
                     await interaction.response.send_message('Ranked Watch list currently empty')
 
     @client.slash_command(guild_ids=[testingServerID])
-    async def print_player_list(self, interaction:Interaction):
+    async def print_players(self, interaction:Interaction):
         '''Returns list of players in player database'''
         async with aiosqlite.connect('./database/main.db') as db:
             async with db.cursor() as cursor:
@@ -244,6 +254,25 @@ class RankedWatch(commands.Cog):
                     await interaction.response.send_message(player_list)
                 else:
                     await interaction.response.send_message('Player database currently empty')
+
+    @client.slash_command(default_member_permissions=Permissions(administrator=True), guild_ids=[testingServerID])
+    async def purge_ranked_watch(self, interaction:Interaction):
+        '''Removes all members in the server from the Ranked Watch list'''
+        async with aiosqlite.connect('./database/main.db') as db:
+            async with db.cursor() as cursor:
+                await cursor.execute('DELETE FROM rankedwatch WHERE guildID = ?', (interaction.guild_id,))
+            await db.commit()
+        await interaction.response.send_message('All members removed from Ranked Watch list')
+
+    @client.slash_command(default_member_permissions=Permissions(administrator=True), guild_ids=[testingServerID])
+    async def change_ranked_watch_channel(self, interaction:Interaction):
+        '''Change where Ranked Watch sends results messages to text channel this command is sent in'''
+        channel_id = interaction.channel_id
+        async with aiosqlite.connect('./database/main.db') as db:
+            async with db.cursor() as cursor:
+                await cursor.execute('UPDATE servers SET rankedwatch_channel = ? WHERE guildID = ?', (channel_id, interaction.guild_id,))
+            await db.commit()
+        await interaction.response.send_message(f'Ranked Watch will now send messages to {interaction.guild.get_channel(channel_id).mention}')
         
 def setup(bot):
     bot.add_cog(RankedWatch(bot))
