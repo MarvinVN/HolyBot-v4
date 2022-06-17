@@ -28,7 +28,7 @@ class RankedWatch(commands.Cog):
                 await cursor.execute('CREATE TABLE IF NOT EXISTS players (summonerName VARCHAR(16), tier VARCHAR(12), division VARCHAR(3), LP INTEGER, lastmatch VARCHAR(255))')
                 await cursor.execute('CREATE TABLE IF NOT EXISTS updated (summonerName VARCHAR(16), tier VARCHAR(12), division VARCHAR(3), LP INTEGER, lastmatch VARCHAR(255), win BOOL)')
             await db.commit()
-        self.rankedwatch.start()
+        self.rankedwatch_loop.start()
     
     #purely for testing
     @commands.command()
@@ -63,7 +63,7 @@ class RankedWatch(commands.Cog):
         return res
 
     @tasks.loop(minutes=15)
-    async def rankedwatch(self):
+    async def rankedwatch_loop(self):
         async with aiosqlite.connect("./database/main.db") as db:
             async with db.cursor() as cursor:
 
