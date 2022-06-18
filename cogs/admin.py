@@ -2,7 +2,7 @@ from nextcord import Interaction, Permissions
 from nextcord.ext import commands, tasks
 import nextcord
 import aiosqlite
-from bot import testingServerID, client
+from bot import testingServerID
 from itertools import cycle
 
 status = cycle([

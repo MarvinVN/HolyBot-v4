@@ -1,12 +1,9 @@
-from cgi import test
-from email.mime import application
-from grpc import Channel
-from nextcord import Interaction, Permissions, SlashOption, ChannelType
+from nextcord import Interaction, SlashOption, ChannelType
 from nextcord.abc import GuildChannel
 from nextcord.ext import commands, tasks, application_checks
 import nextcord
 import aiosqlite
-from bot import testingServerID, client
+from bot import testingServerID
 import cassiopeia as cass
 import os
 from dotenv import load_dotenv
