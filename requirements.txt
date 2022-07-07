@@ -1,5 +1,5 @@
-nextcord
-pysqlite3
-aiosqlite
-python-dotenv
-cassiopeia
+nextcord==2.0.0b3
+pysqlite3==0.4.7
+aiosqlite==0.17.0
+python-dotenv==0.20.0
+cassiopeia==5.0.1
