@@ -3,7 +3,6 @@ from nextcord.abc import GuildChannel
 from nextcord.ext import commands, tasks, application_checks
 import nextcord
 import aiosqlite
-from bot import testingServerID
 import cassiopeia as cass
 import os
 from dotenv import load_dotenv
@@ -153,7 +152,7 @@ class RankedWatch(commands.Cog):
             await db.commit()
         print("Ranked Watch cycle done")  
 
-    @nextcord.slash_command(name="rankedwatch", guild_ids=[testingServerID])
+    @nextcord.slash_command(name="rankedwatch")
     async def rankedwatch(self, interaction:Interaction):
         pass
 
