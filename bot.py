@@ -7,8 +7,6 @@ import aiosqlite
 import os
 from dotenv import load_dotenv
 
-testingServerID = 216653732526424065 #only used for production, take out of slash command arguments once fully implemented
-
 intents = nextcord.Intents().all()
 load_dotenv()
 token = os.getenv("SECRET")
@@ -72,7 +70,7 @@ async def on_member_join(member):
     await member.guild.text_channels[0].send(f'{member.mention} has joined!')
     await member.add_roles(member.guild.get_role(await get_autorole(member.guild)))
 
-@client.slash_command(guild_ids=[testingServerID])
+@client.slash_command()
 async def ping(interaction:Interaction):
     '''Pings the bot'''
     await interaction.response.send_message("Pong!")
