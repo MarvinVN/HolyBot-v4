@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 from nextcord import Interaction, SlashOption, ChannelType
 from nextcord.abc import GuildChannel
 from nextcord.ext import commands, tasks, application_checks
@@ -49,13 +50,33 @@ class RankedWatch(commands.Cog):
     Ongoing issue, will find solution later
     '''
     def get_ranked_data(self, summoner:cass.Summoner):
-        target = [entry for entry in summoner.league_entries.fives.league.entries if entry.summoner.name == summoner.name][0]
+        res = {
+            'name': summoner.name,
+            'tier': "",
+            'division': "",
+            'lp': 0
+        }
+        try:
+            target = [entry for entry in summoner.league_entries.fives.league.entries if entry.summoner.name == summoner.name][0]
+            res['tier'] = str(target.tier)
+            res['division'] = str(target.division)
+            res['lp'] = target.league_points
+        except ValueError as e:
+            if len(e.args) > 0:
+                if e.args[0] == "Queue does not exist for this summoner.":
+                    res['tier'] = "Unranked"
+                    res['division'] = "N/A"
+                #elif e.args[0] == "'RANKED_TFT_DOUBLE_UP' is not a valid Queue":
+                print(e.args[0])
+            else:
+                raise e
+        '''
         res = {
             'name': target.summoner.name,
             'tier': str(target.tier),
             'division': str(target.division),
             'lp': target.league_points
-        }
+        }'''
         return res
 
     @tasks.loop(minutes=15)
@@ -195,7 +216,7 @@ class RankedWatch(commands.Cog):
         pass
 
     @remove.subcommand(name='watchlist')
-    @application_checks.has_permissions(move_members=True)
+    #@application_checks.has_permissions(move_members=True)
     async def watchlist(self, interaction:Interaction, member:nextcord.Member):
         '''Stops updates for and removes member from Ranked Watch list'''
         async with aiosqlite.connect("./database/main.db") as db:
@@ -212,7 +233,7 @@ class RankedWatch(commands.Cog):
             await db.commit()
 
     @remove.subcommand(name='playerlist')
-    @application_checks.has_permissions(administrator=True)
+    #@application_checks.has_permissions(administrator=True)
     async def playerlist(self, interaction:Interaction, summonername:str):
         '''Removes a player from the Ranked Watch database. Cannot be done if player is still on the Ranked Watch list'''
         async with aiosqlite.connect("./database/main.db") as db:
