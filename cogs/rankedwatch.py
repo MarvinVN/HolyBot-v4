@@ -27,7 +27,7 @@ class RankedWatch(commands.Cog):
             await db.commit()
         self.rankedwatch_loop.start()
     
-    #purely for testing
+    #development only
     @commands.command()
     async def randommatch(self, interaction:Interaction, summonername):
         newmatch = ''.join(random.choice(string.ascii_letters) for i in range(10))
@@ -36,6 +36,17 @@ class RankedWatch(commands.Cog):
                 await cursor.execute('UPDATE players SET lastmatch = ? WHERE summonerName = ?', (newmatch, summonername,))
             await db.commit()
         await interaction.send('Done')
+
+    #development only
+    @commands.command()
+    async def purgeplayerlist(self, interaction:Interaction):
+        '''Removes all players from player list'''
+        async with aiosqlite.connect('./database/main.db') as db:
+            async with db.cursor() as cursor:
+                await cursor.execute('DELETE FROM players')
+            await db.commit()
+        print('All members removed from player list')
+
 
     def get_last_match(self, summoner:cass.Summoner)->cass.Match:
         match_history = cass.get_match_history(
