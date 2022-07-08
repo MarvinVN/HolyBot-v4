@@ -45,7 +45,7 @@ async def on_ready():
 async def on_guild_join(guild):
     async with aiosqlite.connect('./database/main.db') as db:
         async with db.cursor() as cursor:
-            await cursor.execute('INSERT INTO servers (guildID, autorole, rankedwatch_channel) VALUES (?, ?)', (guild.id, 0, 0,))
+            await cursor.execute('INSERT INTO servers (guildID, autorole, rankedwatch_channel) VALUES (?, ?, ?)', (guild.id, 0, 0,))
         await db.commit()
 
 @client.event
