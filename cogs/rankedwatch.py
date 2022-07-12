@@ -177,7 +177,7 @@ class RankedWatch(commands.Cog):
                         embedVar.set_footer(text="Ranked Watch updates every 15 minutes | LP change might not always be accurate")
                         await guild.get_channel(text_channel).send(embed=embedVar)
 
-                await cursor.execute('UPDATE players SET tier = (SELECT updated.tier FROM updated WHERE updated.summonerName = summonerName) WHERE EXISTS (SELECT updated.tier FROM updated WHERE updated.summonerName = summonerName), division = (SELECT updated.division FROM updated WHERE updated.summonerName = summonerName) WHERE EXISTS (SELECT updated.division FROM updated WHERE updated.summonerName = summonerName), LP = (SELECT updated.LP FROM updated WHERE updated.summonerName = summonerName) WHERE EXISTS (SELECT updated.LP FROM updated WHERE updated.summonerName = summonerName), lastmatch = (SELECT updated.lastmatch FROM updated WHERE updated.summonerName = summonerName) WHERE EXISTS (SELECT updated.lastmatch FROM updated WHERE updated.summonerName = summonerName)')
+                await cursor.execute('UPDATE players SET tier = (SELECT updated.tier FROM updated WHERE updated.summonerName = summonerName), division = (SELECT updated.division FROM updated WHERE updated.summonerName = summonerName), LP = (SELECT updated.LP FROM updated WHERE updated.summonerName = summonerName), lastmatch = (SELECT updated.lastmatch FROM updated WHERE updated.summonerName = summonerName) WHERE EXISTS(SELECT * FROM updated WHERE updated.summonerName = players.summonerName)')
                 await db.commit()
                 await cursor.execute('DELETE FROM updated')   
             await db.commit()
