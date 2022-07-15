@@ -4,4 +4,4 @@ aiosqlite==0.17.0
 python-dotenv==0.20.0
 cassiopeia==5.0.1
 motor==3.0.0
-pymongo==4.1.1
+pymongo[srv]==4.1.1
