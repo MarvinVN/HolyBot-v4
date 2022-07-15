@@ -3,3 +3,4 @@ pysqlite3==0.4.7
 aiosqlite==0.17.0
 python-dotenv==0.20.0
 cassiopeia==5.0.1
+motor==3.0.0
