@@ -70,6 +70,8 @@ class RankedWatch(commands.Cog):
             members = server
             
             guild = self.bot.get_guild(server_id)
+            if guild is None: continue
+
             text_channel_id = await db_servers.find(server_id)
             text_channel = guild.get_channel(text_channel_id['rw_channel'])
             
@@ -95,7 +97,7 @@ class RankedWatch(commands.Cog):
                 if cached:
                     cached.pop('_id')
                     ranked_data = cached
-                    print(ranked_data)
+                    newmatch_id = ranked_data['newmatch_id']
                 else:
                     newmatch = self.get_last_match(summoner)
                     newmatch_id = str(newmatch.id)
@@ -134,7 +136,7 @@ class RankedWatch(commands.Cog):
                 embedVar.add_field(name=embed_name, value=embed_value, inline=False)
 
                 if not cached:
-                    await db_player_cache.insert({'_id': puuid, 'tier': ranked_data['tier'], 'division': ranked_data['division'], 'lp': ranked_data['lp'], 'win': ranked_data['win']})
+                    await db_player_cache.insert({'_id': puuid, 'tier': ranked_data['tier'], 'division': ranked_data['division'], 'lp': ranked_data['lp'], 'win': ranked_data['win'], 'newmatch_id': newmatch_id})
 
                 await db_rankedwatch.update({"_id": server_id, member_id:{'summonerName': summonername, 'region': region, 'puuid': puuid, 'tier': ranked_data['tier'], 'division': ranked_data['division'], 'lp': ranked_data['lp'], 'lastmatch_id': newmatch_id}})
 
