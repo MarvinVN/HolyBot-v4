@@ -122,7 +122,6 @@ class RankedWatch(commands.Cog):
 
                 if ranked_data['win']:
                     result, rank_change = 'WON', 'PROMOTED'
-                    lp_gain = f'+{lp_gain}'
                 else:
                     result, rank_change = 'LOST', 'DEMOTED'
 
@@ -131,7 +130,7 @@ class RankedWatch(commands.Cog):
                 if tier != ranked_data['tier'] or division != ranked_data['division']:
                     embed_value = f'{rank_change} : {member.mention} is now {ranked_data["tier"]} {ranked_data["division"]}'
                 else:
-                    embed_value = f'{lp_gain} IN {tier.upper()} {division} | {member.mention}'
+                    embed_value = f'{lp_gain:+} IN {tier.upper()} {division} | {member.mention}'
 
                 embedVar.add_field(name=embed_name, value=embed_value, inline=False)
 
